@@ -1,9 +1,10 @@
 import os
 
-from dotenv import load_dotenv
-
-
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 VERSION_KEY = 61_000
 # Default NETUID if not set in environment
@@ -32,7 +33,7 @@ MINER_CONTAINER_SCRIPTS_PATH = "/app/scripts"
 DIFFUSION_DATASET_DIR = "core/dataset/images"
 CONTAINER_FLUX_PATH = "/app/flux/unet"
 
-DIFFUSION_SDXL_REPEATS = 5
+DIFFUSION_SDXL_REPEATS = 3
 DIFFUSION_FLUX_REPEATS = 1
 DIFFUSION_DEFAULT_INSTANCE_PROMPT = "lora"
 DIFFUSION_DEFAULT_CLASS_PROMPT = "style"
