@@ -44,6 +44,11 @@ async def download_text_dataset(task_id, dataset_url, file_format, dataset_dir):
 async def download_image_dataset(dataset_zip_url, task_id, dataset_dir):
     os.makedirs(dataset_dir, exist_ok=True)
     local_zip_path = train_paths.get_image_training_zip_save_path(task_id)
+    
+    if os.path.exists(local_zip_path):
+        print(f"Dataset already exists at {local_zip_path}. Skipping download.")
+        return local_zip_path
+        
     print(f"Downloading dataset from: {dataset_zip_url}")
     local_path = await download_s3_file(dataset_zip_url, local_zip_path)
     print(f"Downloaded dataset to: {local_path}")
