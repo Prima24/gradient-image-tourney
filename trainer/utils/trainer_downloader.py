@@ -56,23 +56,31 @@ async def download_image_dataset(dataset_zip_url, task_id, dataset_dir):
 
 
 def is_safetensors_available(repo_id: str) -> tuple[bool, str | None]:
-    files_metadata = hf_api.list_repo_tree(repo_id=repo_id, repo_type="model")
-    check_size_in_gb = 6
-    total_check_size = check_size_in_gb * 1024 * 1024 * 1024
-    largest_file = None
+    if os.getenv("HF_HUB_OFFLINE") == "1":
+        print(f"Offline mode: skipping safetensors check for {repo_id}")
+        return False, None
+    try:
+        files_metadata = hf_api.list_repo_tree(repo_id=repo_id, repo_type="model")
+        check_size_in_gb = 6
+        total_check_size = check_size_in_gb * 1024 * 1024 * 1024
+        largest_file = None
 
-    for file in files_metadata:
-        if hasattr(file, "size") and file.size is not None:
-            if file.path.endswith(".safetensors") and file.size > total_check_size:
-                if largest_file is None or file.size > largest_file.size:
-                    largest_file = file
+        for file in files_metadata:
+            if hasattr(file, "size") and file.size is not None:
+                if file.path.endswith(".safetensors") and file.size > total_check_size:
+                    if largest_file is None or file.size > largest_file.size:
+                        largest_file = file
 
-    if largest_file:
-        return True, largest_file.path
+        if largest_file:
+            return True, largest_file.path
+    except Exception as e:
+        print(f"Warning: Could not check for safetensors in {repo_id}: {e}")
     return False, None
 
 
 def download_from_huggingface(repo_id: str, filename: str, local_dir: str) -> str:
+    if os.getenv("HF_HUB_OFFLINE") == "1":
+        raise RuntimeError(f"Model file {filename} is missing and offline mode is enabled.")
     try:
         local_dir = os.path.expanduser(local_dir)
         local_filename = f"{repo_id.replace('/', '_')}.safetensors"
@@ -93,15 +101,24 @@ def download_from_huggingface(repo_id: str, filename: str, local_dir: str) -> st
 async def download_base_model(repo_id: str, save_root: str, model_type: ImageModelType) -> str:
     model_name = repo_id.replace("/", "--")
     save_path = os.path.join(save_root, model_name)
+    print(f"[Downloader] Checking model path: {save_path}")
     if os.path.exists(save_path):
-        print(f"Model {repo_id} already exists at {save_path}. Skipping download.")
+        print(f"[Downloader] Model {repo_id} already exists at {save_path}. Skipping download.")
         return save_path
     else:
+        if os.getenv("HF_HUB_OFFLINE") == "1":
+             print(f"[Downloader] Error: Model {repo_id} not found in cache and HF_HUB_OFFLINE is set.")
+             raise FileNotFoundError(f"Model {repo_id} not found in cache at {save_path} and network is disabled.")
+             
+        print(f"[Downloader] Model not found locally. Checking for safetensors in {repo_id}...")
         has_safetensors, safetensors_path = is_safetensors_available(repo_id)
         if has_safetensors and safetensors_path and model_type in [ImageModelType.FLUX, ImageModelType.SDXL]:
+            print(f"[Downloader] Safetensors found: {safetensors_path}. Downloading single file...")
             return download_from_huggingface(repo_id, safetensors_path, save_path)
         else:
+            print(f"[Downloader] Safetensors not found or not appropriate for type {model_type}. Downloading full snapshot...")
             snapshot_download(repo_id=repo_id, repo_type="model", local_dir=save_path, local_dir_use_symlinks=False)
+            print(f"[Downloader] Snapshot download complete: {save_path}")
             return save_path
 
 

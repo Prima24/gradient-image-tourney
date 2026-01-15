@@ -533,7 +533,8 @@ def run_training(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        bufsize=1
+        bufsize=1,
+        env={**os.environ, "HF_HUB_OFFLINE": "1"}
     )
     
     current_epoch = 0
@@ -667,12 +668,21 @@ async def main():
     parser.add_argument("--hours-to-complete", type=float, required=True)
     args = parser.parse_args()
     
+    # Enforce offline mode for Hugging Face Hub if running in a restricted network
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    
     os.makedirs(train_cst.IMAGE_CONTAINER_CONFIG_SAVE_PATH, exist_ok=True)
     os.makedirs(train_cst.IMAGE_CONTAINER_IMAGES_PATH, exist_ok=True)
     
     print(f"Ensuring base model {args.model} is available...", flush=True)
     model_path = await download_base_model(args.model, train_cst.CACHE_MODELS_DIR, args.model_type)
     model_path = get_model_path(model_path)
+    
+    if not os.path.exists(model_path):
+        print(f"❌ Error: Base model path {model_path} does not exist. The downloader likely failed or skipped the model.")
+        sys.exit(1)
+        
+    print(f"Using base model at: {model_path}", flush=True)
     
     start_time = time.time()
     deadline_timestamp = start_time + (args.hours_to_complete * 3600)
