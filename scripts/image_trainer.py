@@ -644,10 +644,10 @@ def run_training(
     if oom_detected:
         raise RuntimeError(OOM_ERROR)
     
-    if ret != 0:
+    if ret != 0 and not stopped_by_timeout:
         raise RuntimeError(f"Training subprocess failed with exit code {ret}")
     
-    return None
+    return stopped_by_timeout
 
 
 def hash_model(model: str) -> str:
@@ -710,6 +710,10 @@ async def main():
     max_retries = 3
     
     for attempt in range(max_retries):
+        if time.time() >= deadline_timestamp:
+            print("\n⏳ Training deadline already reached. Skipping further attempts.", flush=True)
+            break
+
         try:
             print(f"\n--- Training Attempt {attempt+1}/{max_retries} (Dim Scale: {dim_scale}) ---", flush=True)
             
@@ -723,7 +727,7 @@ async def main():
                 dim_scale=dim_scale
             )
             
-            run_training(
+            stopped_by_timeout = run_training(
                 model_type=args.model_type,
                 config_path=config_path,
                 output_dir=output_dir,
@@ -732,6 +736,10 @@ async def main():
                 deadline_timestamp=deadline_timestamp
             )
             
+            if stopped_by_timeout:
+                print("\n⏳ Training stopped because time allocation finished. Exiting.", flush=True)
+                break
+
             print("\n✅ Training complete!", flush=True)
             break
             
@@ -751,6 +759,10 @@ async def main():
                 else:
                     print("❌ Max retries reached with OOM. Training failed.", flush=True)
                     sys.exit(1)
+            else:
+                print(f"\n❌ Training failed with error: {e}", flush=True)
+                sys.exit(1)
+
                 
         except Exception as e:
             print(f"\n❌ Unrecoverable error: {e}", flush=True)
